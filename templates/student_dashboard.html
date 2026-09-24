@@ -1,0 +1,27 @@
+{% extends "base.html" %}
+{% block title %}My Attendance{% endblock %}
+{% block content %}
+<h4 class="mb-3">Welcome, {{ student.full_name }}</h4>
+<p class="text-muted">Class: {{ student.class_name }} &nbsp;|&nbsp; Student Code: {{ student.student_code }}</p>
+
+<div class="card">
+    <div class="card-body p-0">
+        <table class="table mb-0">
+            <thead class="table-light">
+                <tr><th>Date</th><th>Time</th><th>Status</th></tr>
+            </thead>
+            <tbody>
+                {% for r in records %}
+                <tr>
+                    <td>{{ r.session.session_date }}</td>
+                    <td>{{ r.session.time_label or "—" }}</td>
+                    <td class="status-{{ r.status }}">{{ r.status|capitalize }}</td>
+                </tr>
+                {% else %}
+                <tr><td colspan="3" class="text-center text-muted py-4">No attendance records yet.</td></tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+</div>
+{% endblock %}

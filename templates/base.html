@@ -1,0 +1,42 @@
+<!doctype html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>{% block title %}Smart Attendance System{% endblock %}</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">
+    <style>
+        body { background-color: #f4f6f9; }
+        .navbar-brand { font-weight: 600; }
+        .card { border: none; box-shadow: 0 1px 4px rgba(0,0,0,0.08); }
+        .status-present { color: #2e8b57; font-weight: 600; }
+        .status-absent { color: #b02a37; font-weight: 600; }
+        .status-unknown { color: #b8860b; font-weight: 600; }
+    </style>
+</head>
+<body>
+<nav class="navbar navbar-dark" style="background-color:#1B2A4A;">
+    <div class="container">
+        <span class="navbar-brand">📋 Smart Attendance System</span>
+        {% if current_user.is_authenticated %}
+        <div class="d-flex align-items-center">
+            <span class="text-white me-3">{{ current_user.username }} ({{ current_user.role }})</span>
+            <a href="{{ url_for('logout') }}" class="btn btn-outline-light btn-sm">Logout</a>
+        </div>
+        {% endif %}
+    </div>
+</nav>
+
+<div class="container mt-4 mb-5">
+    {% with messages = get_flashed_messages(with_categories=true) %}
+        {% if messages %}
+            {% for category, message in messages %}
+                <div class="alert alert-{{ 'danger' if category == 'error' else 'success' }}">{{ message }}</div>
+            {% endfor %}
+        {% endif %}
+    {% endwith %}
+
+    {% block content %}{% endblock %}
+</div>
+</body>
+</html>

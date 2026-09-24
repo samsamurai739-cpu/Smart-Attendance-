@@ -1,0 +1,51 @@
+{% extends "base.html" %}
+{% block title %}Session Detail{% endblock %}
+{% block content %}
+<a href="{{ url_for('teacher_dashboard') }}" class="btn btn-sm btn-link ps-0">&larr; Back to sessions</a>
+
+<div class="d-flex justify-content-between align-items-center mb-3">
+    <h4>{{ session.class_name }} — {{ session.session_date }} {{ session.time_label or "" }}</h4>
+    <a href="{{ url_for('export_session', session_id=session.id) }}" class="btn btn-success">⬇ Download Excel</a>
+</div>
+
+<div class="card mb-3">
+    <div class="card-body p-0">
+        <table class="table mb-0">
+            <thead class="table-light">
+                <tr><th>Student</th><th>Code</th><th>Status</th><th>Time Seen</th><th>Update</th></tr>
+            </thead>
+            <tbody>
+                {% for r in records %}
+                <tr>
+                    <td>{{ r.student.full_name if r.student else "— Unknown person —" }}</td>
+                    <td>{{ r.student.student_code if r.student else "-" }}</td>
+                    <td class="status-{{ r.status }}">{{ r.status|capitalize }}</td>
+                    <td>{{ r.time_seen or r.note or "—" }}</td>
+                    <td>
+                        {% if r.student %}
+                        <form method="POST" action="{{ url_for('mark_attendance', session_id=session.id, record_id=r.id) }}" class="d-flex gap-1">
+                            <select name="status" class="form-select form-select-sm" style="width:auto;">
+                                <option value="present" {% if r.status=='present' %}selected{% endif %}>Present</option>
+                                <option value="absent" {% if r.status=='absent' %}selected{% endif %}>Absent</option>
+                            </select>
+                            <button class="btn btn-sm btn-outline-primary">Save</button>
+                        </form>
+                        {% endif %}
+                    </td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+</div>
+
+<div class="card">
+    <div class="card-body">
+        <h6>Simulate an "Unknown person detected" (for testing without a camera)</h6>
+        <form method="POST" action="{{ url_for('add_unknown', session_id=session.id) }}" class="d-flex gap-2">
+            <input type="text" name="note" class="form-control" placeholder="Optional note, e.g. 'front row, 10:05'">
+            <button class="btn btn-outline-warning">Add Unknown Detection</button>
+        </form>
+    </div>
+</div>
+{% endblock %}
