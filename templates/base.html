@@ -1,42 +1,208 @@
-<!doctype html>
-<html lang="en">
-<head>
-    <meta charset="utf-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1">
-    <title>{% block title %}Smart Attendance System{% endblock %}</title>
-    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">
-    <style>
-        body { background-color: #f4f6f9; }
-        .navbar-brand { font-weight: 600; }
-        .card { border: none; box-shadow: 0 1px 4px rgba(0,0,0,0.08); }
-        .status-present { color: #2e8b57; font-weight: 600; }
-        .status-absent { color: #b02a37; font-weight: 600; }
-        .status-unknown { color: #b8860b; font-weight: 600; }
-    </style>
-</head>
-<body>
-<nav class="navbar navbar-dark" style="background-color:#1B2A4A;">
-    <div class="container">
-        <span class="navbar-brand">📋 Smart Attendance System</span>
-        {% if current_user.is_authenticated %}
-        <div class="d-flex align-items-center">
-            <span class="text-white me-3">{{ current_user.username }} ({{ current_user.role }})</span>
-            <a href="{{ url_for('logout') }}" class="btn btn-outline-light btn-sm">Logout</a>
-        </div>
-        {% endif %}
-    </div>
-</nav>
+/* ============================================================
+   Smart Attendance System — Academic Theme
+   Palette: deep navy + brass accent, on cool paper white
+   ============================================================ */
 
-<div class="container mt-4 mb-5">
-    {% with messages = get_flashed_messages(with_categories=true) %}
-        {% if messages %}
-            {% for category, message in messages %}
-                <div class="alert alert-{{ 'danger' if category == 'error' else 'success' }}">{{ message }}</div>
-            {% endfor %}
-        {% endif %}
-    {% endwith %}
+:root {
+    --navy: #14233F;
+    --navy-deep: #0E1A30;
+    --navy-mid: #24365A;
+    --paper: #F5F4F0;
+    --card: #FFFFFF;
+    --ink: #232B3A;
+    --ink-soft: #5B6472;
+    --brass: #A9803F;
+    --brass-light: #C9A876;
+    --line: #DCD9D0;
 
-    {% block content %}{% endblock %}
-</div>
-</body>
-</html>
+    --status-present: #2F7D5C;
+    --status-present-bg: #E7F2EC;
+    --status-absent: #A6432E;
+    --status-absent-bg: #F7E9E5;
+    --status-unknown: #A9803F;
+    --status-unknown-bg: #F5EEE1;
+
+    --radius: 10px;
+    --radius-sm: 7px;
+}
+
+body {
+    background-color: var(--paper);
+    color: var(--ink);
+    font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+}
+
+h1, h2, h3, h4, h5, .brand-font {
+    font-family: 'Fraunces', Georgia, 'Times New Roman', serif;
+    color: var(--navy);
+    letter-spacing: -0.01em;
+}
+
+/* ---------- Navbar ---------- */
+.navbar {
+    background-color: var(--navy) !important;
+    box-shadow: 0 1px 0 rgba(0,0,0,0.08);
+}
+.navbar-brand {
+    font-family: 'Fraunces', Georgia, serif;
+    font-size: 1.15rem;
+    font-weight: 600;
+    letter-spacing: -0.01em;
+    color: #FFFFFF !important;
+}
+.navbar .text-white {
+    color: #E7E2D6 !important;
+}
+.navbar .btn-outline-light {
+    border-radius: var(--radius-sm);
+    border-color: var(--brass-light);
+    color: var(--brass-light);
+}
+.navbar .btn-outline-light:hover {
+    background-color: var(--brass);
+    border-color: var(--brass);
+    color: var(--navy-deep);
+}
+
+/* ---------- Cards ---------- */
+.card {
+    background-color: var(--card);
+    border: 1px solid var(--line);
+    border-radius: var(--radius);
+    box-shadow: 0 1px 3px rgba(20, 35, 63, 0.06);
+}
+
+/* ---------- Buttons ---------- */
+.btn {
+    border-radius: var(--radius-sm);
+    font-weight: 500;
+    padding-left: 1rem;
+    padding-right: 1rem;
+}
+
+.btn-primary {
+    background-color: var(--navy);
+    border-color: var(--navy);
+}
+.btn-primary:hover, .btn-primary:focus {
+    background-color: var(--navy-mid);
+    border-color: var(--navy-mid);
+}
+
+.btn-outline-primary {
+    color: var(--navy);
+    border-color: var(--navy);
+}
+.btn-outline-primary:hover {
+    background-color: var(--navy);
+    border-color: var(--navy);
+}
+
+.btn-outline-secondary {
+    color: var(--ink-soft);
+    border-color: var(--line);
+}
+.btn-outline-secondary:hover {
+    background-color: var(--ink-soft);
+    border-color: var(--ink-soft);
+}
+
+.btn-success, .btn-outline-success {
+    color: var(--status-present);
+    border-color: var(--status-present);
+}
+.btn-success {
+    background-color: var(--status-present);
+    color: #fff;
+}
+.btn-outline-success:hover {
+    background-color: var(--status-present);
+    color: #fff;
+}
+
+.btn-outline-warning {
+    color: var(--brass);
+    border-color: var(--brass);
+}
+.btn-outline-warning:hover {
+    background-color: var(--brass);
+    color: #fff;
+    border-color: var(--brass);
+}
+
+.btn-outline-danger {
+    color: var(--status-absent);
+    border-color: var(--status-absent);
+}
+.btn-outline-danger:hover {
+    background-color: var(--status-absent);
+    color: #fff;
+}
+
+/* ---------- Forms ---------- */
+.form-control, .form-select {
+    border-radius: var(--radius-sm);
+    border-color: var(--line);
+}
+.form-control:focus, .form-select:focus {
+    border-color: var(--navy-mid);
+    box-shadow: 0 0 0 0.2rem rgba(20, 35, 63, 0.12);
+}
+.form-label {
+    color: var(--ink);
+    font-weight: 500;
+    font-size: 0.92rem;
+}
+
+/* ---------- Tables ---------- */
+.table {
+    color: var(--ink);
+    margin-bottom: 0;
+}
+.table thead.table-light th {
+    background-color: var(--paper);
+    color: var(--ink-soft);
+    font-size: 0.78rem;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    font-weight: 600;
+    border-bottom: 1px solid var(--line);
+}
+.table td, .table th {
+    border-color: var(--line);
+    vertical-align: middle;
+}
+
+/* ---------- Status labels ---------- */
+.status-present, .status-absent, .status-unknown {
+    display: inline-block;
+    padding: 0.2rem 0.6rem;
+    border-radius: 999px;
+    font-size: 0.82rem;
+    font-weight: 600;
+}
+.status-present { color: var(--status-present); background: var(--status-present-bg); }
+.status-absent  { color: var(--status-absent);  background: var(--status-absent-bg); }
+.status-unknown { color: var(--status-unknown); background: var(--status-unknown-bg); }
+
+/* ---------- Alerts ---------- */
+.alert-success {
+    background-color: var(--status-present-bg);
+    border-color: var(--status-present);
+    color: var(--status-present);
+    border-radius: var(--radius-sm);
+}
+.alert-danger {
+    background-color: var(--status-absent-bg);
+    border-color: var(--status-absent);
+    color: var(--status-absent);
+    border-radius: var(--radius-sm);
+}
+
+/* ---------- Links ---------- */
+a {
+    color: var(--navy-mid);
+}
+a:hover {
+    color: var(--brass);
+}
