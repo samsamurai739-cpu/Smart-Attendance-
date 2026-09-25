@@ -3,7 +3,8 @@ from datetime import datetime, date
 from io import BytesIO
 
 from flask import (
-    Flask, render_template, redirect, url_for, request, flash, send_file, abort
+    Flask, render_template, redirect, url_for, request, flash, send_file, abort,
+    jsonify, send_from_directory
 )
 from flask_login import (
     LoginManager, login_user, logout_user, login_required, current_user
@@ -26,6 +27,10 @@ app.config["SQLALCHEMY_DATABASE_URI"] = os.environ.get(
 )
 app.config["UPLOAD_FOLDER"] = UPLOAD_FOLDER
 os.makedirs(UPLOAD_FOLDER, exist_ok=True)  # create it automatically if missing (e.g. on a fresh deploy)
+
+# Shared secret the camera program uses to talk to these API routes.
+# Set this as an environment variable (API_KEY) on Railway/Render too.
+API_KEY = os.environ.get("API_KEY", "dev-camera-key-change-this")
 
 db.init_app(app)
 
@@ -295,6 +300,12 @@ def export_session(session_id):
     )
 
 
+@app.route("/uploads/<path:filename>")
+@login_required
+def uploaded_photo(filename):
+    return send_from_directory(app.config["UPLOAD_FOLDER"], filename)
+
+
 # ----------------------------------------------------------- Student area --
 
 @app.route("/student")
@@ -310,6 +321,124 @@ def student_dashboard():
         .all()
     )
     return render_template("student_dashboard.html", student=student, records=records)
+
+
+# -------------------------------------------------- Camera program API ---
+# These two routes are used by the separate camera_app program (not by
+# anyone's browser). They're protected by a shared API_KEY instead of a
+# login, since the camera program runs unattended in the classroom.
+
+def check_api_key():
+    key = request.headers.get("X-API-Key") or request.args.get("api_key")
+    if key != API_KEY:
+        abort(401)
+
+
+@app.route("/api/students")
+def api_students():
+    """Returns every student (optionally filtered by class), with a direct
+    link to their reference photo, so the camera program can download them
+    and build face encodings."""
+    check_api_key()
+    class_name = request.args.get("class_name")
+
+    query = Student.query
+    if class_name:
+        query = query.filter_by(class_name=class_name)
+
+    results = []
+    for s in query.all():
+        photo_url = None
+        if s.photo_filename:
+            photo_url = url_for(
+                "api_photo", filename=s.photo_filename, api_key=API_KEY, _external=True
+            )
+        results.append({
+            "id": s.id,
+            "student_code": s.student_code,
+            "full_name": s.full_name,
+            "class_name": s.class_name,
+            "photo_url": photo_url,
+        })
+    return jsonify(results)
+
+
+@app.route("/api/photo/<path:filename>")
+def api_photo(filename):
+    check_api_key()
+    return send_from_directory(app.config["UPLOAD_FOLDER"], filename)
+
+
+@app.route("/api/attendance/submit", methods=["POST"])
+def api_submit_attendance():
+    """Called once by the camera program at the end of a class session.
+    Expects JSON:
+    {
+        "class_name": "CS101-A",
+        "session_date": "2026-09-25",
+        "time_label": "10:00 - 11:00",
+        "present_student_codes": ["S001", "S002"],
+        "unknown_count": 2
+    }
+    Creates the session, marks the listed students Present (with the
+    remaining students in that class as Absent), and logs the given
+    number of Unknown detections — exactly like the manual test buttons
+    in the website already do.
+    """
+    check_api_key()
+    data = request.get_json(force=True, silent=True) or {}
+
+    class_name = data.get("class_name", "").strip()
+    if not class_name:
+        return jsonify({"error": "class_name is required"}), 400
+
+    session_date_str = data.get("session_date") or date.today().isoformat()
+    time_label = data.get("time_label", "")
+    present_codes = set(data.get("present_student_codes", []))
+    unknown_count = int(data.get("unknown_count", 0))
+
+    session_obj = ClassSession(
+        class_name=class_name,
+        session_date=datetime.strptime(session_date_str, "%Y-%m-%d").date(),
+        time_label=time_label,
+    )
+    db.session.add(session_obj)
+    db.session.flush()
+
+    now_str = datetime.now().strftime("%H:%M")
+    students = Student.query.filter_by(class_name=class_name).all()
+    present_found = set()
+
+    for s in students:
+        is_present = s.student_code in present_codes
+        if is_present:
+            present_found.add(s.student_code)
+        db.session.add(Attendance(
+            session_id=session_obj.id,
+            student_id=s.id,
+            status="present" if is_present else "absent",
+            time_seen=now_str if is_present else None,
+        ))
+
+    for _ in range(unknown_count):
+        db.session.add(Attendance(
+            session_id=session_obj.id,
+            student_id=None,
+            status="unknown",
+            time_seen=now_str,
+            note="Detected by camera, not recognized",
+        ))
+
+    db.session.commit()
+
+    unmatched_codes = present_codes - present_found
+    return jsonify({
+        "ok": True,
+        "session_id": session_obj.id,
+        "students_marked_present": len(present_found),
+        "unknown_logged": unknown_count,
+        "warning_unmatched_codes": list(unmatched_codes) or None,
+    })
 
 
 # --------------------------------------------------------------- Runner ---
