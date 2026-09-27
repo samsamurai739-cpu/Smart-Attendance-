@@ -1,8 +1,20 @@
 {% extends "base.html" %}
 {% block title %}My Attendance{% endblock %}
 {% block content %}
-<h4 class="mb-3">Welcome, {{ student.full_name }}</h4>
-<p class="text-muted">Class: {{ student.class_name }} &nbsp;|&nbsp; Student Code: {{ student.student_code }}</p>
+{% if show_warning %}
+<div class="alert alert-danger">
+    <strong>Attendance warning:</strong> you have been absent {{ absence_count }} time(s),
+    which has reached the limit of {{ threshold }}. Please contact your teacher.
+</div>
+{% endif %}
+
+<div class="d-flex justify-content-between align-items-center mb-3">
+    <div>
+        <h4 class="mb-1">Welcome, {{ student.full_name }}</h4>
+        <p class="text-muted mb-0">Class: {{ student.class_name }} &nbsp;|&nbsp; Student Code: {{ student.student_code }}</p>
+    </div>
+    <a href="{{ url_for('change_password') }}" class="btn btn-outline-secondary btn-sm">Change Password</a>
+</div>
 
 <div class="card">
     <div class="card-body p-0">
