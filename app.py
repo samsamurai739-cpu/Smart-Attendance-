@@ -32,6 +32,10 @@ os.makedirs(UPLOAD_FOLDER, exist_ok=True)  # create it automatically if missing 
 # Set this as an environment variable (API_KEY) on Railway/Render too.
 API_KEY = os.environ.get("API_KEY", "dev-camera-key-change-this")
 
+# A student is flagged with a warning once their TOTAL absences (across all
+# their lectures, not necessarily in a row) reaches this number.
+ABSENCE_WARNING_THRESHOLD = 3
+
 db.init_app(app)
 
 login_manager = LoginManager()
@@ -46,6 +50,10 @@ def load_user(user_id):
 
 def allowed_file(filename):
     return "." in filename and filename.rsplit(".", 1)[1].lower() in ALLOWED_EXTENSIONS
+
+
+def get_absence_count(student_id):
+    return Attendance.query.filter_by(student_id=student_id, status="absent").count()
 
 
 def teacher_required():
@@ -97,7 +105,19 @@ def logout():
 def teacher_dashboard():
     teacher_required()
     sessions = ClassSession.query.order_by(ClassSession.session_date.desc()).all()
-    return render_template("teacher_dashboard.html", sessions=sessions)
+
+    at_risk = []
+    for s in Student.query.order_by(Student.class_name, Student.full_name).all():
+        count = get_absence_count(s.id)
+        if count >= ABSENCE_WARNING_THRESHOLD:
+            at_risk.append({"student": s, "absences": count})
+
+    return render_template(
+        "teacher_dashboard.html",
+        sessions=sessions,
+        at_risk=at_risk,
+        threshold=ABSENCE_WARNING_THRESHOLD,
+    )
 
 
 @app.route("/teacher/students", methods=["GET", "POST"])
@@ -306,6 +326,125 @@ def uploaded_photo(filename):
     return send_from_directory(app.config["UPLOAD_FOLDER"], filename)
 
 
+@app.route("/change-password", methods=["GET", "POST"])
+@login_required
+def change_password():
+    if request.method == "POST":
+        current = request.form.get("current_password", "")
+        new = request.form.get("new_password", "")
+        confirm = request.form.get("confirm_password", "")
+
+        if not check_password_hash(current_user.password_hash, current):
+            flash("Your current password is incorrect.", "error")
+            return redirect(url_for("change_password"))
+
+        if len(new) < 4:
+            flash("New password must be at least 4 characters.", "error")
+            return redirect(url_for("change_password"))
+
+        if new != confirm:
+            flash("New password and confirmation don't match.", "error")
+            return redirect(url_for("change_password"))
+
+        current_user.password_hash = generate_password_hash(new)
+        db.session.commit()
+        flash("Password updated. Use your new password next time you log in.", "success")
+        return redirect(url_for("teacher_dashboard") if current_user.role == "teacher"
+                         else url_for("student_dashboard"))
+
+    return render_template("change_password.html")
+
+
+@app.route("/teacher/export_all")
+@login_required
+def export_all_sessions():
+    teacher_required()
+
+    wb = openpyxl.Workbook()
+    wb.remove(wb.active)  # remove the default blank sheet, we add our own per class
+
+    status_symbol = {"present": "P", "absent": "A", "unknown": "U"}
+    status_fill = {
+        "present": PatternFill(start_color="E4F1E9", end_color="E4F1E9", fill_type="solid"),
+        "absent":  PatternFill(start_color="F6E4E4", end_color="F6E4E4", fill_type="solid"),
+        "unknown": PatternFill(start_color="F7EDD8", end_color="F7EDD8", fill_type="solid"),
+    }
+
+    class_names = [c[0] for c in db.session.query(Student.class_name).distinct().all()]
+
+    for class_name in sorted(class_names):
+        students = (
+            Student.query.filter_by(class_name=class_name)
+            .order_by(Student.full_name)
+            .all()
+        )
+        sessions = (
+            ClassSession.query.filter_by(class_name=class_name)
+            .order_by(ClassSession.session_date)
+            .all()
+        )
+
+        sheet_title = class_name[:31] if class_name else "Class"
+        ws = wb.create_sheet(title=sheet_title)
+
+        # Header row: Student Code, Student Name, one column per session date,
+        # then a Total Absences summary column.
+        headers = ["Student Code", "Student Name"]
+        headers += [s.session_date.strftime("%Y-%m-%d") for s in sessions]
+        headers += ["Total Absences"]
+        ws.append(headers)
+
+        for col in range(1, len(headers) + 1):
+            cell = ws.cell(row=1, column=col)
+            cell.font = Font(bold=True, color="FFFFFF")
+            cell.fill = PatternFill(start_color="1B2A4A", end_color="1B2A4A", fill_type="solid")
+            cell.alignment = Alignment(horizontal="center")
+
+        # Look up every attendance record once, keyed by (session_id, student_id),
+        # so we don't run one query per cell.
+        session_ids = [s.id for s in sessions]
+        records = Attendance.query.filter(Attendance.session_id.in_(session_ids)).all() \
+            if session_ids else []
+        lookup = {(r.session_id, r.student_id): r.status for r in records}
+
+        for student in students:
+            row = [student.student_code, student.full_name]
+            absences = 0
+            for s in sessions:
+                status = lookup.get((s.id, student.id), "absent")  # not in session's roster snapshot -> absent
+                row.append(status_symbol.get(status, "?"))
+                if status == "absent":
+                    absences += 1
+            row.append(absences)
+            ws.append(row)
+
+            row_num = ws.max_row
+            for col_idx, s in enumerate(sessions, start=3):
+                status = lookup.get((s.id, student.id), "absent")
+                ws.cell(row=row_num, column=col_idx).fill = status_fill.get(status)
+                ws.cell(row=row_num, column=col_idx).alignment = Alignment(horizontal="center")
+
+        ws.column_dimensions["A"].width = 14
+        ws.column_dimensions["B"].width = 24
+        for i in range(3, len(headers) + 1):
+            ws.column_dimensions[openpyxl.utils.get_column_letter(i)].width = 12
+
+    if not wb.sheetnames:
+        ws = wb.create_sheet(title="No Data")
+        ws.append(["No students or sessions yet."])
+
+    buffer = BytesIO()
+    wb.save(buffer)
+    buffer.seek(0)
+
+    return send_file(
+        buffer,
+        as_attachment=True,
+        download_name="all_lectures_attendance.xlsx",
+        mimetype="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+    )
+
+
 # ----------------------------------------------------------- Student area --
 
 @app.route("/student")
@@ -320,7 +459,16 @@ def student_dashboard():
         .order_by(ClassSession.session_date.desc())
         .all()
     )
-    return render_template("student_dashboard.html", student=student, records=records)
+    absence_count = get_absence_count(student.id)
+    show_warning = absence_count >= ABSENCE_WARNING_THRESHOLD
+    return render_template(
+        "student_dashboard.html",
+        student=student,
+        records=records,
+        absence_count=absence_count,
+        show_warning=show_warning,
+        threshold=ABSENCE_WARNING_THRESHOLD,
+    )
 
 
 # -------------------------------------------------- Camera program API ---
