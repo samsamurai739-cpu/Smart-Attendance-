@@ -1,11 +1,26 @@
 {% extends "base.html" %}
 {% block title %}Teacher Dashboard{% endblock %}
 {% block content %}
+{% if at_risk %}
+<div class="alert alert-danger">
+    <strong>Attendance warning:</strong> {{ at_risk|length }} student(s) have reached
+    {{ threshold }} or more total absences:
+    <ul class="mb-0 mt-2">
+        {% for item in at_risk %}
+        <li>{{ item.student.full_name }} ({{ item.student.student_code }}, {{ item.student.class_name }})
+            &mdash; {{ item.absences }} absence(s)</li>
+        {% endfor %}
+    </ul>
+</div>
+{% endif %}
+
 <div class="d-flex justify-content-between align-items-center mb-4">
     <h4>Class Sessions</h4>
     <div>
         <a href="{{ url_for('manage_students') }}" class="btn btn-outline-secondary me-2">Manage Students</a>
-        <a href="{{ url_for('new_session') }}" class="btn btn-primary">+ New Session</a>
+        <a href="{{ url_for('export_all_sessions') }}" class="btn btn-outline-success me-2">⬇ Download All Lectures (Excel)</a>
+        <a href="{{ url_for('new_session') }}" class="btn btn-primary me-2">+ New Session</a>
+        <a href="{{ url_for('change_password') }}" class="btn btn-outline-secondary">Change Password</a>
     </div>
 </div>
 
